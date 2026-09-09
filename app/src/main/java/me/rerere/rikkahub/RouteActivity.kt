@@ -534,10 +534,10 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.GroupChatList> {
                                 GroupChatListPage(
                                     groupChats = emptyList(),
-                                    assistants = emptyList(),
+                                    assistants = settings.assistants.map { it.id to it.name },
                                     onNavigateToGroupChat = {},
                                     onCreateGroupChat = {},
-                                    onBack = { }
+                                    onBack = { backStack.removeLastOrNull() }
                                 )
                             }
                         }

@@ -85,6 +85,7 @@ import androidx.compose.ui.draw.clip
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
 import com.dokar.sonner.ToastType
+import me.rerere.hugeicons.stroke.Message02
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.rememberIsPlayStoreVersion
@@ -403,7 +404,17 @@ fun ChatDrawerContent(
                         navController.navigate(Screen.Stats)
                     },
                 )
-
+                DrawerAction(
+                    icon = {
+                        Icon(HugeIcons.Message02, "群聊")
+                    },
+                    label = {
+                        Text("群聊")
+                    },
+                    onClick = {
+                        navController.navigate(Screen.GroupChatList)
+                    },
+                )
                 Spacer(Modifier.weight(1f))
 
                 DrawerAction(

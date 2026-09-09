@@ -51,11 +51,11 @@ val appModule = module {
     }
 
     single {
-        Firebase.crashlytics
+        null
     }
 
     single {
-        Firebase.analytics
+        null
     }
 
     single {

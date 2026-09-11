@@ -14,9 +14,11 @@ import me.rerere.rikkahub.data.model.GroupChat
 import me.rerere.rikkahub.data.model.GroupActivationStrategy
 import me.rerere.rikkahub.data.model.GroupMessage
 import me.rerere.rikkahub.data.model.GroupPersona
+import me.rerere.rikkahub.ui.components.ui.TextAvatar
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowTurnBackward
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Forward02
 import me.rerere.hugeicons.stroke.Setting07
 import kotlin.uuid.Uuid
@@ -40,6 +42,7 @@ fun GroupChatPage(
     isGenerating: Boolean,
     currentSpeaker: String,
     onSendMessage: (String) -> Unit,
+    onStopGeneration: () -> Unit,
     onBack: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
@@ -100,6 +103,7 @@ fun GroupChatPage(
                         inputText = ""
                     }
                 },
+                onStop = onStopGeneration,
                 isGenerating = isGenerating
             )
         }
@@ -117,6 +121,11 @@ fun GroupChatPage(
                     UserMessageBubble(message = message)
                 } else {
                     GroupMemberMessageBubble(message = message)
+                }
+            }
+            if (isGenerating) {
+                item(key = "typing_indicator") {
+                    TypingIndicator(speakerName = currentSpeaker)
                 }
             }
         }
@@ -145,32 +154,76 @@ private fun UserMessageBubble(message: GroupMessage) {
 
 @Composable
 private fun GroupMemberMessageBubble(message: GroupMessage) {
-    Column(
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.Start
+        verticalAlignment = Alignment.Top
     ) {
-        Text(
+        TextAvatar(
             text = message.speakerName,
-            style = MaterialTheme.typography.labelSmall,
-            color = memberColors.getOrElse(message.colorIndex) { memberColors[0] },
-            modifier = Modifier.padding(start = 12.dp, bottom = 2.dp)
+            modifier = Modifier.size(32.dp),
+            color = memberColors.getOrElse(message.colorIndex) { memberColors[0] }.copy(alpha = 0.3f)
         )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = message.speakerName,
+                style = MaterialTheme.typography.labelSmall,
+                color = memberColors.getOrElse(message.colorIndex) { memberColors[0] },
+                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+            )
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.widthIn(max = 280.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = message.content,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (message.isGenerating) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TypingIndicator(speakerName: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextAvatar(
+            text = speakerName.ifEmpty { "?" },
+            modifier = Modifier.size(32.dp),
+            loading = true
+        )
+        Spacer(modifier = Modifier.width(8.dp))
         Surface(
             shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.widthIn(max = 280.dp)
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = message.content,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "${speakerName.ifEmpty { "..." }} 正在输入",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
-                if (message.isGenerating) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+                LinearProgressIndicator(
+                    modifier = Modifier.width(24.dp).height(2.dp)
+                )
             }
         }
     }
@@ -181,8 +234,10 @@ private fun GroupChatInputBar(
     inputText: String,
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
+    onStop: () -> Unit,
     isGenerating: Boolean
 ) {
+    val showStop = isGenerating && inputText.isBlank()
     Surface(
         tonalElevation = 3.dp,
         modifier = Modifier.fillMaxWidth()
@@ -202,18 +257,33 @@ private fun GroupChatInputBar(
                 singleLine = false
             )
             Spacer(modifier = Modifier.width(8.dp))
-            IconButton(
-                onClick = onSend,
-                enabled = inputText.isNotBlank()
-            ) {
-                Icon(
-                    HugeIcons.Forward02,
-                    contentDescription = "发送",
-                    tint = if (inputText.isNotBlank())
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                )
+            if (showStop) {
+                FilledIconButton(
+                    onClick = onStop,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                ) {
+                    Icon(
+                        HugeIcons.Cancel01,
+                        contentDescription = "停止生成"
+                    )
+                }
+            } else {
+                IconButton(
+                    onClick = onSend,
+                    enabled = inputText.isNotBlank()
+                ) {
+                    Icon(
+                        HugeIcons.Forward02,
+                        contentDescription = "发送",
+                        tint = if (inputText.isNotBlank())
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                }
             }
         }
     }
@@ -225,6 +295,8 @@ fun GroupChatSettingsSheet(
     groupChat: GroupChat,
     assistants: List<Pair<Uuid, String>>,
     onUpdateGroupChat: (GroupChat) -> Unit,
+    onClearMessages: () -> Unit,
+    onDeleteGroupChat: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState()
@@ -296,6 +368,66 @@ fun GroupChatSettingsSheet(
                     groupChat = groupChat,
                     assistants = assistants,
                     onUpdateGroupChat = onUpdateGroupChat
+                )
+            }
+
+            HorizontalDivider()
+
+            var showClearConfirm by remember { mutableStateOf(false) }
+            var showDeleteConfirm by remember { mutableStateOf(false) }
+
+            OutlinedButton(
+                onClick = { showClearConfirm = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(HugeIcons.Delete01, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("清除消息")
+            }
+            OutlinedButton(
+                onClick = { showDeleteConfirm = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                )
+            ) {
+                Icon(HugeIcons.Delete01, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("删除群聊")
+            }
+
+            if (showClearConfirm) {
+                AlertDialog(
+                    onDismissRequest = { showClearConfirm = false },
+                    title = { Text("清除消息") },
+                    text = { Text("确定要清除所有消息吗？此操作不可撤销。") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            onClearMessages()
+                            showClearConfirm = false
+                        }) { Text("清除") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showClearConfirm = false }) { Text("取消") }
+                    }
+                )
+            }
+            if (showDeleteConfirm) {
+                AlertDialog(
+                    onDismissRequest = { showDeleteConfirm = false },
+                    title = { Text("删除群聊") },
+                    text = { Text("确定要删除这个群聊吗？所有消息都会被删除，此操作不可撤销。") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            onDeleteGroupChat()
+                            showDeleteConfirm = false
+                        }) {
+                            Text("删除", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDeleteConfirm = false }) { Text("取消") }
+                    }
                 )
             }
 

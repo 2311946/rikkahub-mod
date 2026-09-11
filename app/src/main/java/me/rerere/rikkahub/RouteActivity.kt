@@ -571,6 +571,7 @@ class RouteActivity : ComponentActivity() {
                                         isGenerating = generatingInfo.isGenerating,
                                         currentSpeaker = generatingInfo.currentSpeaker,
                                         onSendMessage = { text -> vm.sendMessage(text) },
+                                        onStopGeneration = { vm.stopGeneration() },
                                         onBack = { backStack.removeLastOrNull() },
                                         onOpenSettings = { showSettings = true }
                                     )
@@ -580,6 +581,11 @@ class RouteActivity : ComponentActivity() {
                                             groupChat = gc,
                                             assistants = assistants,
                                             onUpdateGroupChat = { updated -> vm.updateGroupChat(updated) },
+                                            onClearMessages = { vm.clearMessages() },
+                                            onDeleteGroupChat = {
+                                                vm.deleteGroupChat()
+                                                backStack.removeLastOrNull()
+                                            },
                                             onDismiss = { showSettings = false }
                                         )
                                     }

@@ -96,6 +96,14 @@ val dataSourceModule = module {
     }
 
     single {
+        get<AppDatabase>().groupChatDao()
+    }
+
+    single {
+        get<AppDatabase>().groupMessageDao()
+    }
+
+    single {
         MessageFtsManager(get())
     }
 

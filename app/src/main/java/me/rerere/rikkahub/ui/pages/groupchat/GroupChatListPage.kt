@@ -13,10 +13,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.data.model.GroupChat
 import me.rerere.rikkahub.data.model.GroupActivationStrategy
-import me.rerere.rikkahub.data.model.GroupGenerationMode
+import me.rerere.rikkahub.data.model.GroupPersona
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowTurnBackward
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Message02
 import kotlin.uuid.Uuid
 
@@ -137,13 +138,19 @@ private fun GroupChatItem(
                     style = MaterialTheme.typography.titleMedium
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                val memberNames = groupChat.memberIds
-                    .take(3)
-                    .mapNotNull { id -> assistants.find { it.first == id }?.second }
-                    .joinToString("、")
-                val suffix = if (groupChat.memberIds.size > 3) " 等${groupChat.memberIds.size}人" else ""
+                val memberNames = if (groupChat.personas.isNotEmpty()) {
+                    val names = groupChat.personas.take(3).map { it.name }
+                    val suffix = if (groupChat.personas.size > 3) " 等${groupChat.personas.size}人" else ""
+                    names.joinToString("、") + suffix
+                } else {
+                    val names = groupChat.memberIds
+                        .take(3)
+                        .mapNotNull { id -> assistants.find { it.first == id }?.second }
+                    val suffix = if (groupChat.memberIds.size > 3) " 等${groupChat.memberIds.size}人" else ""
+                    names.joinToString("、") + suffix
+                }
                 Text(
-                    text = memberNames + suffix,
+                    text = memberNames,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -159,7 +166,7 @@ private fun CreateGroupChatDialog(
     onCreate: (GroupChat) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
-    var selectedIds by remember { mutableStateOf(setOf<Uuid>()) }
+    var personas by remember { mutableStateOf(listOf<GroupPersona>()) }
     var strategy by remember { mutableStateOf(GroupActivationStrategy.NATURAL) }
     var autoRounds by remember { mutableStateOf(3) }
     var autoDelay by remember { mutableStateOf(3) }
@@ -215,29 +222,58 @@ private fun CreateGroupChatDialog(
                     steps = 8
                 )
 
-                Text("选择成员（至少2人）", style = MaterialTheme.typography.labelLarge)
-                assistants.forEach { (id, assistantName) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                selectedIds = if (id in selectedIds) {
-                                    selectedIds - id
-                                } else {
-                                    selectedIds + id
+                Text("角色（至少2个）", style = MaterialTheme.typography.labelLarge)
+                assistants.forEach { (assistantId, assistantName) ->
+                    val assistantPersonas = personas.filter { it.assistantId == assistantId }
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = assistantName,
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = {
+                                personas = personas + GroupPersona(
+                                    assistantId = assistantId,
+                                    name = assistantName,
+                                )
+                            }) {
+                                Text("添加角色")
+                            }
+                        }
+                        assistantPersonas.forEach { persona ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 16.dp, bottom = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedTextField(
+                                    value = persona.name,
+                                    onValueChange = { newName ->
+                                        personas = personas.map {
+                                            if (it.id == persona.id) it.copy(name = newName) else it
+                                        }
+                                    },
+                                    label = { Text("角色名") },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                IconButton(onClick = {
+                                    personas = personas.filter { it.id != persona.id }
+                                }) {
+                                    Icon(HugeIcons.Cancel01, contentDescription = "删除",
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(
-                            checked = id in selectedIds,
-                            onCheckedChange = {
-                                selectedIds = if (it) selectedIds + id else selectedIds - id
-                            }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(assistantName)
+                        }
+                    }
+                    if (assistantPersonas.isNotEmpty()) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     }
                 }
             }
@@ -248,14 +284,14 @@ private fun CreateGroupChatDialog(
                     onCreate(
                         GroupChat(
                             name = name.ifEmpty { "群聊" },
-                            memberIds = selectedIds.toList(),
+                            personas = personas,
                             activationStrategy = strategy,
                             autoChatRounds = autoRounds,
                             autoModeDelay = autoDelay
                         )
                     )
                 },
-                enabled = selectedIds.size >= 2
+                enabled = personas.size >= 2
             ) {
                 Text("创建")
             }

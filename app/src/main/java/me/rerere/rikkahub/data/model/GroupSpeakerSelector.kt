@@ -7,7 +7,8 @@ object GroupSpeakerSelector {
     data class MemberInfo(
         val id: Uuid,
         val name: String,
-        val talkativeness: Float = 0.5f
+        val talkativeness: Float = 0.5f,
+        val assistantId: Uuid? = null,
     )
 
     fun pick(

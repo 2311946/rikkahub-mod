@@ -10,6 +10,7 @@ import me.rerere.rikkahub.data.model.GroupActivationStrategy
 import me.rerere.rikkahub.data.model.GroupChat
 import me.rerere.rikkahub.data.model.GroupGenerationMode
 import me.rerere.rikkahub.data.model.GroupMessage
+import me.rerere.rikkahub.data.model.GroupPersona
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.uuid.Uuid
 
@@ -90,6 +91,9 @@ private fun GroupChatEntity.toDomain(): GroupChat {
         autoModeDelay = autoModeDelay,
         autoChatRounds = autoChatRounds,
         chatModelId = chatModelId.takeIf { it.isNotEmpty() }?.let { Uuid.parse(it) },
+        personas = runCatching {
+            JsonInstant.decodeFromString<List<GroupPersona>>(personas)
+        }.getOrDefault(emptyList()),
     )
 }
 
@@ -110,6 +114,7 @@ private fun GroupChat.toEntity(): GroupChatEntity {
         autoModeDelay = autoModeDelay,
         autoChatRounds = autoChatRounds,
         chatModelId = chatModelId?.toString() ?: "",
+        personas = JsonInstant.encodeToString(personas),
         createAt = now,
         updateAt = now,
     )

@@ -30,6 +30,8 @@ data class GroupChatEntity(
     val autoChatRounds: Int = 3,
     @ColumnInfo("chat_model_id", defaultValue = "")
     val chatModelId: String = "",
+    @ColumnInfo("personas", defaultValue = "[]")
+    val personas: String = "[]",
     @ColumnInfo("create_at")
     val createAt: Long,
     @ColumnInfo("update_at")

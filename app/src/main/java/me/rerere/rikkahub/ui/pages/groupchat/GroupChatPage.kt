@@ -13,8 +13,10 @@ import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.data.model.GroupChat
 import me.rerere.rikkahub.data.model.GroupActivationStrategy
 import me.rerere.rikkahub.data.model.GroupMessage
+import me.rerere.rikkahub.data.model.GroupPersona
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowTurnBackward
+import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Forward02
 import me.rerere.hugeicons.stroke.Setting07
 import kotlin.uuid.Uuid
@@ -63,8 +65,13 @@ fun GroupChatPage(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         } else {
+                            val memberCount = if (groupChat.personas.isNotEmpty()) {
+                                groupChat.personas.size
+                            } else {
+                                groupChat.memberIds.size
+                            }
                             Text(
-                                text = "${groupChat.memberIds.size}位成员",
+                                text = "${memberCount}位成员",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -221,6 +228,7 @@ fun GroupChatSettingsSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState()
+    var editingPersona by remember { mutableStateOf<GroupPersona?>(null) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -276,44 +284,234 @@ fun GroupChatSettingsSheet(
                 steps = 8
             )
 
-            Text("成员管理", style = MaterialTheme.typography.titleMedium)
-            assistants.forEach { (id, assistantName) ->
-                val isMember = id in groupChat.memberIds
-                val isDisabled = id in groupChat.disabledMemberIds
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = isMember,
-                        onCheckedChange = { checked ->
-                            val newIds = if (checked) {
-                                groupChat.memberIds + id
-                            } else {
-                                groupChat.memberIds - id
-                            }
-                            onUpdateGroupChat(groupChat.copy(memberIds = newIds))
-                        }
-                    )
-                    Text(assistantName, modifier = Modifier.weight(1f))
-                    if (isMember) {
-                        TextButton(
-                            onClick = {
-                                val newDisabled = if (isDisabled) {
-                                    groupChat.disabledMemberIds - id
-                                } else {
-                                    groupChat.disabledMemberIds + id
-                                }
-                                onUpdateGroupChat(groupChat.copy(disabledMemberIds = newDisabled))
-                            }
-                        ) {
-                            Text(if (isDisabled) "解除禁言" else "禁言")
-                        }
-                    }
-                }
+            if (groupChat.personas.isNotEmpty()) {
+                PersonaManagementSection(
+                    groupChat = groupChat,
+                    assistants = assistants,
+                    onUpdateGroupChat = onUpdateGroupChat,
+                    onEditPersona = { editingPersona = it }
+                )
+            } else {
+                LegacyMemberSection(
+                    groupChat = groupChat,
+                    assistants = assistants,
+                    onUpdateGroupChat = onUpdateGroupChat
+                )
             }
 
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
+
+    editingPersona?.let { persona ->
+        EditPersonaDialog(
+            persona = persona,
+            onDismiss = { editingPersona = null },
+            onSave = { updated ->
+                val newPersonas = groupChat.personas.map {
+                    if (it.id == updated.id) updated else it
+                }
+                onUpdateGroupChat(groupChat.copy(personas = newPersonas))
+                editingPersona = null
+            }
+        )
+    }
+}
+
+@Composable
+private fun PersonaManagementSection(
+    groupChat: GroupChat,
+    assistants: List<Pair<Uuid, String>>,
+    onUpdateGroupChat: (GroupChat) -> Unit,
+    onEditPersona: (GroupPersona) -> Unit
+) {
+    Text("角色管理", style = MaterialTheme.typography.titleMedium)
+
+    val personasByAssistant = groupChat.personas.groupBy { it.assistantId }
+
+    assistants.forEach { (assistantId, assistantName) ->
+        val thisAssistantPersonas = personasByAssistant[assistantId] ?: emptyList()
+        if (thisAssistantPersonas.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = assistantName,
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = {
+                    val newPersona = GroupPersona(
+                        assistantId = assistantId,
+                        name = assistantName,
+                    )
+                    onUpdateGroupChat(groupChat.copy(personas = groupChat.personas + newPersona))
+                }) {
+                    Text("添加角色")
+                }
+            }
+            thisAssistantPersonas.forEach { persona ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Switch(
+                        checked = persona.enabled,
+                        onCheckedChange = { enabled ->
+                            val newPersonas = groupChat.personas.map {
+                                if (it.id == persona.id) it.copy(enabled = enabled) else it
+                            }
+                            onUpdateGroupChat(groupChat.copy(personas = newPersonas))
+                        }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = persona.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = { onEditPersona(persona) }) {
+                        Text("编辑")
+                    }
+                    IconButton(onClick = {
+                        val newPersonas = groupChat.personas.filter { it.id != persona.id }
+                        onUpdateGroupChat(groupChat.copy(personas = newPersonas))
+                    }) {
+                        Icon(
+                            HugeIcons.Cancel01,
+                            contentDescription = "删除",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+        }
+    }
+
+    // Assistants not yet in the group — offer to add personas from them
+    val usedAssistantIds = personasByAssistant.keys
+    val unusedAssistants = assistants.filter { it.first !in usedAssistantIds }
+    if (unusedAssistants.isNotEmpty()) {
+        Text("添加新助手的角色", style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        unusedAssistants.forEach { (assistantId, assistantName) ->
+            TextButton(onClick = {
+                val newPersona = GroupPersona(
+                    assistantId = assistantId,
+                    name = assistantName,
+                )
+                onUpdateGroupChat(groupChat.copy(personas = groupChat.personas + newPersona))
+            }) {
+                Text("+ $assistantName")
+            }
+        }
+    }
+}
+
+@Composable
+private fun LegacyMemberSection(
+    groupChat: GroupChat,
+    assistants: List<Pair<Uuid, String>>,
+    onUpdateGroupChat: (GroupChat) -> Unit
+) {
+    Text("成员管理", style = MaterialTheme.typography.titleMedium)
+    assistants.forEach { (id, assistantName) ->
+        val isMember = id in groupChat.memberIds
+        val isDisabled = id in groupChat.disabledMemberIds
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(
+                checked = isMember,
+                onCheckedChange = { checked ->
+                    val newIds = if (checked) {
+                        groupChat.memberIds + id
+                    } else {
+                        groupChat.memberIds - id
+                    }
+                    onUpdateGroupChat(groupChat.copy(memberIds = newIds))
+                }
+            )
+            Text(assistantName, modifier = Modifier.weight(1f))
+            if (isMember) {
+                TextButton(
+                    onClick = {
+                        val newDisabled = if (isDisabled) {
+                            groupChat.disabledMemberIds - id
+                        } else {
+                            groupChat.disabledMemberIds + id
+                        }
+                        onUpdateGroupChat(groupChat.copy(disabledMemberIds = newDisabled))
+                    }
+                ) {
+                    Text(if (isDisabled) "解除禁言" else "禁言")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditPersonaDialog(
+    persona: GroupPersona,
+    onDismiss: () -> Unit,
+    onSave: (GroupPersona) -> Unit
+) {
+    var name by remember { mutableStateOf(persona.name) }
+    var systemPrompt by remember { mutableStateOf(persona.systemPrompt) }
+    var talkativeness by remember { mutableStateOf(persona.talkativeness) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("编辑角色") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("角色名") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = systemPrompt,
+                    onValueChange = { systemPrompt = it },
+                    label = { Text("系统提示词（留空使用助手默认）") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    maxLines = 6
+                )
+                Text(
+                    "话多程度: ${"%.1f".format(talkativeness)}",
+                    style = MaterialTheme.typography.labelLarge
+                )
+                Slider(
+                    value = talkativeness,
+                    onValueChange = { talkativeness = it },
+                    valueRange = 0f..1f
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onSave(persona.copy(
+                    name = name,
+                    systemPrompt = systemPrompt,
+                    talkativeness = talkativeness
+                ))
+            }) {
+                Text("保存")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
 }

@@ -46,17 +46,48 @@ class GroupChatService(
             )
             groupChatRepository.insertMessage(groupChatId, userMessage)
 
-            val allMembers = groupChat.memberIds.mapNotNull { memberId ->
-                val assistant = settings.assistants.find { it.id == memberId }
-                assistant?.let {
+            val allMembers: List<GroupSpeakerSelector.MemberInfo>
+            val enabledMembers: List<GroupSpeakerSelector.MemberInfo>
+
+            if (groupChat.personas.isNotEmpty()) {
+                allMembers = groupChat.personas.map { persona ->
                     GroupSpeakerSelector.MemberInfo(
-                        id = it.id,
-                        name = it.name,
-                        talkativeness = 0.5f,
+                        id = persona.id,
+                        name = persona.name,
+                        talkativeness = persona.talkativeness,
+                        assistantId = persona.assistantId,
                     )
                 }
+                enabledMembers = groupChat.personas
+                    .filter { it.enabled }
+                    .map { persona ->
+                        GroupSpeakerSelector.MemberInfo(
+                            id = persona.id,
+                            name = persona.name,
+                            talkativeness = persona.talkativeness,
+                            assistantId = persona.assistantId,
+                        )
+                    }
+            } else {
+                allMembers = groupChat.memberIds.mapNotNull { memberId ->
+                    val assistant = settings.assistants.find { it.id == memberId }
+                    assistant?.let {
+                        GroupSpeakerSelector.MemberInfo(
+                            id = it.id,
+                            name = it.name,
+                            talkativeness = it.talkativeness,
+                            assistantId = it.id,
+                        )
+                    }
+                }
+                enabledMembers = allMembers.filter { it.id !in groupChat.disabledMemberIds }
             }
-            val enabledMembers = allMembers.filter { it.id !in groupChat.disabledMemberIds }
+
+            val speakerQueue = if (groupChat.personas.isNotEmpty()) {
+                groupChat.personas.map { it.id }
+            } else {
+                groupChat.memberIds
+            }
 
             var lastSpeakerId: Uuid? = null
             var queueIndex = 0
@@ -70,7 +101,7 @@ class GroupChatService(
                     lastSpeakerId = lastSpeakerId,
                     allowSelfResponses = groupChat.allowSelfResponses,
                     speakerWeights = groupChat.speakerWeights,
-                    speakerQueue = groupChat.memberIds,
+                    speakerQueue = speakerQueue,
                     currentQueueIndex = queueIndex,
                 )
 
@@ -87,8 +118,14 @@ class GroupChatService(
                     val messages = groupChatRepository.getMessages(groupChatId).first()
                     val reply = generateReply(speaker, groupChat, messages)
 
-                    val colorIndex = groupChat.memberIds.indexOf(speaker.id).let {
-                        if (it >= 0) it % 8 else 0
+                    val colorIndex = if (groupChat.personas.isNotEmpty()) {
+                        groupChat.personas.indexOfFirst { it.id == speaker.id }.let {
+                            if (it >= 0) it % 8 else 0
+                        }
+                    } else {
+                        groupChat.memberIds.indexOf(speaker.id).let {
+                            if (it >= 0) it % 8 else 0
+                        }
                     }
                     val assistantMessage = GroupMessage(
                         content = reply,

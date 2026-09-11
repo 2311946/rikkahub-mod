@@ -18,6 +18,16 @@ enum class GroupGenerationMode {
 }
 
 @Serializable
+data class GroupPersona(
+    val id: Uuid = Uuid.random(),
+    val assistantId: Uuid,
+    val name: String,
+    val systemPrompt: String = "",
+    val talkativeness: Float = 0.5f,
+    val enabled: Boolean = true,
+)
+
+@Serializable
 data class GroupChat(
     val id: Uuid = Uuid.random(),
     val name: String = "",
@@ -31,6 +41,7 @@ data class GroupChat(
     val autoModeDelay: Int = 3,
     val autoChatRounds: Int = 3,
     val chatModelId: Uuid? = null,
+    val personas: List<GroupPersona> = emptyList(),
 )
 
 @Serializable

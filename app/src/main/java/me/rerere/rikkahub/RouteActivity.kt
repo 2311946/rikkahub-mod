@@ -31,7 +31,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
@@ -127,13 +129,19 @@ import me.rerere.rikkahub.ui.pages.stats.StatsPage
 import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
 import me.rerere.rikkahub.ui.pages.webview.WebViewPage
 import me.rerere.rikkahub.ui.pages.groupchat.GroupChatListPage
+import me.rerere.rikkahub.ui.pages.groupchat.GroupChatPage
+import me.rerere.rikkahub.ui.pages.groupchat.GroupChatSettingsSheet
+import me.rerere.rikkahub.ui.pages.groupchat.GroupChatListVM
+import me.rerere.rikkahub.ui.pages.groupchat.GroupChatVM
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.openUsageAccessSettings
 import okhttp3.OkHttpClient
 import org.koin.android.ext.android.inject
+import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import org.koin.core.parameter.parametersOf
 import kotlin.uuid.Uuid
 
 private const val TAG = "RouteActivity"
@@ -532,13 +540,50 @@ class RouteActivity : ComponentActivity() {
                             }
 
                             entry<Screen.GroupChatList> {
+                                val vm: GroupChatListVM = koinViewModel()
+                                val groupChats by vm.groupChats.collectAsStateWithLifecycle()
+                                val assistants by vm.assistants.collectAsStateWithLifecycle()
                                 GroupChatListPage(
-                                    groupChats = emptyList(),
-                                    assistants = settings.assistants.map { it.id to it.name },
-                                    onNavigateToGroupChat = {},
-                                    onCreateGroupChat = {},
+                                    groupChats = groupChats,
+                                    assistants = assistants,
+                                    onNavigateToGroupChat = { id ->
+                                        backStack.add(Screen.GroupChat(id.toString()))
+                                    },
+                                    onCreateGroupChat = { gc -> vm.createGroupChat(gc) },
                                     onBack = { backStack.removeLastOrNull() }
                                 )
+                            }
+
+                            entry<Screen.GroupChat> { key ->
+                                val vm: GroupChatVM = koinViewModel(
+                                    parameters = { parametersOf(Uuid.parse(key.id)) }
+                                )
+                                val groupChat by vm.groupChat.collectAsStateWithLifecycle()
+                                val messages by vm.messages.collectAsStateWithLifecycle()
+                                val generatingInfo by vm.generatingInfo.collectAsStateWithLifecycle()
+                                val assistants by vm.assistants.collectAsStateWithLifecycle()
+                                var showSettings by remember { mutableStateOf(false) }
+
+                                groupChat?.let { gc ->
+                                    GroupChatPage(
+                                        groupChat = gc,
+                                        messages = messages,
+                                        isGenerating = generatingInfo.isGenerating,
+                                        currentSpeaker = generatingInfo.currentSpeaker,
+                                        onSendMessage = { text -> vm.sendMessage(text) },
+                                        onBack = { backStack.removeLastOrNull() },
+                                        onOpenSettings = { showSettings = true }
+                                    )
+
+                                    if (showSettings) {
+                                        GroupChatSettingsSheet(
+                                            groupChat = gc,
+                                            assistants = assistants,
+                                            onUpdateGroupChat = { updated -> vm.updateGroupChat(updated) },
+                                            onDismiss = { showSettings = false }
+                                        )
+                                    }
+                                }
                             }
                         }
                     )
@@ -685,6 +730,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object GroupChatList : Screen
+
+    @Serializable
+    data class GroupChat(val id: String) : Screen
 
     @Serializable
     data object SettingSearch : Screen

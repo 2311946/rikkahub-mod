@@ -39,3 +39,14 @@ data class SpeakerRecord(
     val assistantId: String,
     val speakerName: String
 )
+
+data class GroupMessage(
+    val id: String = Uuid.random().toString(),
+    val content: String,
+    val isUser: Boolean,
+    val speakerName: String = "",
+    val speakerId: Uuid? = null,
+    val colorIndex: Int = 0,
+    val isGenerating: Boolean = false,
+    val createAt: Long = System.currentTimeMillis(),
+)

@@ -27,6 +27,7 @@ import me.rerere.rikkahub.data.network.SettingsProxySelector
 import me.rerere.rikkahub.data.network.SettingsProxyAuthenticator
 import me.rerere.rikkahub.data.network.SettingsSocks5Authenticator
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
+import me.rerere.rikkahub.service.GroupChatService
 import me.rerere.search.SearchService
 import me.rerere.rikkahub.data.sync.S3Sync
 import okhttp3.MediaType.Companion.toMediaType
@@ -102,6 +103,8 @@ val dataSourceModule = module {
     single {
         get<AppDatabase>().groupMessageDao()
     }
+
+    single { GroupChatService(get(), get(), get()) }
 
     single {
         MessageFtsManager(get())

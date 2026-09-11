@@ -9,6 +9,7 @@ import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.FilesRepository
 import me.rerere.rikkahub.data.repository.GenMediaRepository
+import me.rerere.rikkahub.data.repository.GroupChatRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.ProotShellRunner
@@ -41,6 +42,10 @@ val repositoryModule = module {
 
     single {
         FavoriteRepository(get())
+    }
+
+    single {
+        GroupChatRepository(get(), get())
     }
 
     single {

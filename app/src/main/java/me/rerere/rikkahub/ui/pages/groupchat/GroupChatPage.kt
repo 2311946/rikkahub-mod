@@ -12,8 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.data.model.GroupChat
 import me.rerere.rikkahub.data.model.GroupActivationStrategy
-import me.rerere.rikkahub.data.model.GroupSpeakerSelector
-import me.rerere.rikkahub.data.model.SpeakerRecord
+import me.rerere.rikkahub.data.model.GroupMessage
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowTurnBackward
 import me.rerere.hugeicons.stroke.Forward02
@@ -29,16 +28,6 @@ private val memberColors = listOf(
     Color(0xFF7B1FA2),
     Color(0xFF00796B),
     Color(0xFFC2185B),
-)
-
-data class GroupMessage(
-    val id: String,
-    val content: String,
-    val isUser: Boolean,
-    val speakerName: String = "",
-    val speakerId: Uuid? = null,
-    val colorIndex: Int = 0,
-    val isGenerating: Boolean = false
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

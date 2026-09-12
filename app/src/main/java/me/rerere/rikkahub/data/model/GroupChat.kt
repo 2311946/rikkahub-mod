@@ -42,6 +42,8 @@ data class GroupChat(
     val autoChatRounds: Int = 3,
     val chatModelId: Uuid? = null,
     val personas: List<GroupPersona> = emptyList(),
+    val createAt: Long = System.currentTimeMillis(),
+    val updateAt: Long = System.currentTimeMillis(),
 )
 
 @Serializable

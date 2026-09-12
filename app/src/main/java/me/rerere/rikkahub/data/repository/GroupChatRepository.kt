@@ -94,11 +94,12 @@ private fun GroupChatEntity.toDomain(): GroupChat {
         personas = runCatching {
             JsonInstant.decodeFromString<List<GroupPersona>>(personas)
         }.getOrDefault(emptyList()),
+        createAt = createAt,
+        updateAt = updateAt,
     )
 }
 
 private fun GroupChat.toEntity(): GroupChatEntity {
-    val now = System.currentTimeMillis()
     return GroupChatEntity(
         id = id.toString(),
         name = name,
@@ -115,8 +116,8 @@ private fun GroupChat.toEntity(): GroupChatEntity {
         autoChatRounds = autoChatRounds,
         chatModelId = chatModelId?.toString() ?: "",
         personas = JsonInstant.encodeToString(personas),
-        createAt = now,
-        updateAt = now,
+        createAt = createAt,
+        updateAt = System.currentTimeMillis(),
     )
 }
 

@@ -188,6 +188,7 @@ Tool call received from LLM
 - Conversation system prompt per-conversation override
 - Mode injections and lorebooks
 - Group chat (multi-assistant)
+- Group chat personas (multiple speaker identities per assistant)
 - Full-text search across messages
 
 ## Architecture Patterns
@@ -203,3 +204,73 @@ Tool call received from LLM
 - Provider model: Stateless Provider<T> with ProviderSetting for config
 - Tool model: Tool with name/description/parameters/execute lambda + needsApproval
 - Transformer pipeline: InputMessageTransformer and OutputMessageTransformer applied before/after generation
+
+## Group Chat Feature (completed 2026-09-12)
+
+Multi-assistant group chat with persona support. Built across 4 phases, all compiled and committed.
+
+### Phase 1: Data Layer
+- Room tables: `group_chats` + `group_messages` (DB v24→v25)
+- Entities: `GroupChatEntity`, `GroupMessageEntity`
+- DAOs: `GroupChatDAO`, `GroupMessageDAO`
+- Domain models: `GroupChat`, `GroupMessage`, `GroupActivationStrategy`, `GroupGenerationMode`, `GroupSpeakerSelector`
+
+### Phase 2: Core Logic
+- `GroupChatRepository` — bridges domain ↔ Room entities with JSON serialization
+- `GroupChatService` — orchestrator: user message → speaker selection → mock generate → persist
+- `GroupChatListVM` / `GroupChatVM` — ViewModels for list and detail pages
+- Koin DI wiring in RepositoryModule, DataSourceModule, ViewModelModule
+- `RouteActivity` navigation: `Screen.GroupChatList`, `Screen.GroupChat(id)`
+
+### Phase 2.5: Personas
+- `GroupPersona` data class (id, assistantId, name, systemPrompt, talkativeness, enabled)
+- Stored as JSON in `GroupChatEntity.personas` column (DB v25→v26 AutoMigration)
+- `GroupSpeakerSelector.MemberInfo` gains `assistantId` for API resolution
+- `GroupChatService` branches on `personas.isNotEmpty()` vs legacy `memberIds`
+- `CreateGroupChatDialog` rewritten: expandable assistant sections, per-persona name editing
+- `GroupChatSettingsSheet` split: `PersonaManagementSection` (toggle/edit/delete per persona) vs `LegacyMemberSection`
+- `EditPersonaDialog`: edit name, system prompt, talkativeness
+
+### Phase 3: UI Polish
+- `TextAvatar` next to each member message bubble (color derived from `memberColors`)
+- Stop generation button: `FilledIconButton` + `Cancel01` when generating + input empty
+- Typing indicator: inline bubble with loading avatar + "XX 正在输入" + progress bar
+- Settings sheet: 清除消息 / 删除群聊 buttons with confirmation dialogs
+- Top bar member count shows persona count when personas present
+
+### Key Files
+| File | Role |
+|------|------|
+| `data/model/GroupChat.kt` | `GroupChat`, `GroupMessage`, `GroupPersona`, enums |
+| `data/model/GroupSpeakerSelector.kt` | Speaker selection strategies (NATURAL/LIST/POOLED) |
+| `data/db/entity/GroupChatEntity.kt` | Room entity with JSON columns |
+| `data/db/entity/GroupMessageEntity.kt` | Room entity for messages |
+| `data/repository/GroupChatRepository.kt` | Domain ↔ entity mapping |
+| `service/GroupChatService.kt` | Generation orchestrator (mock replies for now) |
+| `ui/pages/groupchat/GroupChatPage.kt` | Chat page + settings sheet + bubbles |
+| `ui/pages/groupchat/GroupChatListPage.kt` | Group list + create dialog |
+| `ui/pages/groupchat/GroupChatVM.kt` | Detail ViewModel |
+| `ui/pages/groupchat/GroupChatListVM.kt` | List ViewModel |
+
+### Next: Phase 4 — Persistence (not started)
+- 群聊配置存 Room 数据库（创建/编辑/删除持久化）
+- 群聊消息存 Room（复用 GroupMessageEntity）
+- APP 重启后群聊列表和历史消息不丢
+- GroupChatRepository 接入 DAO 读写
+- 注意：Phase 1-3 的 DAO/Entity/Repository 已搭好骨架，需验证端到端持久化流程
+
+### Phase 5 — Real API Integration (not started)
+- `GroupChatService.generateReply()` 从 mock 替换为真实 `GenerationLoop`
+- 参考 `ChatService.sendQueuedMessage()` 流程：resolve assistant → resolve model/provider → call `Provider.streamText()`
+- 每个角色用自己的 assistant 配置调 API（通过 `persona.assistantId` 查 `settings.assistants`）
+- 按角色切换 system prompt：`persona.systemPrompt` 非空时覆盖，否则用 assistant 默认
+- 流式输出：实时更新消息气泡内容（typing 状态 + 逐 token 追加）
+- 构建群聊上下文：将历史 GroupMessage 转换为 UIMessage 列表传给 provider
+
+### Phase 6 — UX Polish (not started)
+- 群聊设置页完善（改名/加人/踢人/选发言策略）— 基础已在 Phase 3 完成
+- 消息长按菜单（复制/删除/引用回复）
+- @ 功能：输入 @ 弹出成员列表，选择后插入 @名字
+- 群聊内角色互相 @ 自动接话（上限 2 轮防死循环）
+- 群聊随机氛围消息（闲聊、表情、反应）
+- 打字速度随机化（模拟真人节奏，delay 按字数 + 随机抖动）

@@ -1,5 +1,10 @@
 package me.rerere.rikkahub.ui.pages.groupchat
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,7 +14,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
 import me.rerere.rikkahub.data.model.GroupChat
 import me.rerere.rikkahub.data.model.GroupActivationStrategy
 import me.rerere.rikkahub.data.model.GroupMessage
@@ -18,6 +27,7 @@ import me.rerere.rikkahub.ui.components.ui.TextAvatar
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowTurnBackward
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Forward02
 import me.rerere.hugeicons.stroke.Setting07
@@ -44,11 +54,21 @@ fun GroupChatPage(
     streamingContent: String = "",
     onSendMessage: (String) -> Unit,
     onStopGeneration: () -> Unit,
+    onDeleteMessage: (String) -> Unit,
     onBack: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
-    var inputText by remember { mutableStateOf("") }
+    var inputFieldValue by remember { mutableStateOf(TextFieldValue("")) }
     val listState = rememberLazyListState()
+    val context = LocalContext.current
+
+    val memberNames = remember(groupChat) {
+        if (groupChat.personas.isNotEmpty()) {
+            groupChat.personas.filter { it.enabled }.map { it.name }
+        } else {
+            emptyList()
+        }
+    }
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -96,12 +116,14 @@ fun GroupChatPage(
         },
         bottomBar = {
             GroupChatInputBar(
-                inputText = inputText,
-                onInputChange = { inputText = it },
+                inputFieldValue = inputFieldValue,
+                onInputChange = { inputFieldValue = it },
+                memberNames = memberNames,
                 onSend = {
-                    if (inputText.isNotBlank()) {
-                        onSendMessage(inputText.trim())
-                        inputText = ""
+                    val text = inputFieldValue.text
+                    if (text.isNotBlank()) {
+                        onSendMessage(text.trim())
+                        inputFieldValue = TextFieldValue("")
                     }
                 },
                 onStop = onStopGeneration,
@@ -119,9 +141,17 @@ fun GroupChatPage(
         ) {
             items(messages, key = { it.id }) { message ->
                 if (message.isUser) {
-                    UserMessageBubble(message = message)
+                    UserMessageBubble(
+                        message = message,
+                        onCopy = { copyToClipboard(context, message.content) },
+                        onDelete = { onDeleteMessage(message.id) },
+                    )
                 } else {
-                    GroupMemberMessageBubble(message = message)
+                    GroupMemberMessageBubble(
+                        message = message,
+                        onCopy = { copyToClipboard(context, message.content) },
+                        onDelete = { onDeleteMessage(message.id) },
+                    )
                 }
             }
             if (isGenerating) {
@@ -140,28 +170,58 @@ fun GroupChatPage(
     }
 }
 
+private fun copyToClipboard(context: Context, text: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText("group_chat_message", text))
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun UserMessageBubble(message: GroupMessage) {
+private fun UserMessageBubble(
+    message: GroupMessage,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    var showMenu by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.End
     ) {
-        Surface(
-            shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.primaryContainer,
-            modifier = Modifier.widthIn(max = 280.dp)
-        ) {
-            Text(
-                text = message.content,
-                modifier = Modifier.padding(12.dp),
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+        Box {
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = { showMenu = true }
+                    )
+            ) {
+                Text(
+                    text = message.content,
+                    modifier = Modifier.padding(12.dp),
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+            MessageContextMenu(
+                expanded = showMenu,
+                onDismiss = { showMenu = false },
+                onCopy = onCopy,
+                onDelete = onDelete,
             )
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun GroupMemberMessageBubble(message: GroupMessage) {
+private fun GroupMemberMessageBubble(
+    message: GroupMessage,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    var showMenu by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Top
@@ -179,23 +239,36 @@ private fun GroupMemberMessageBubble(message: GroupMessage) {
                 color = memberColors.getOrElse(message.colorIndex) { memberColors[0] },
                 modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
             )
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.widthIn(max = 280.dp)
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = message.content,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (message.isGenerating) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth()
+            Box {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .widthIn(max = 280.dp)
+                        .combinedClickable(
+                            onClick = {},
+                            onLongClick = { showMenu = true }
                         )
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = message.content,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (message.isGenerating) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            LinearProgressIndicator(
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
                 }
+                MessageContextMenu(
+                    expanded = showMenu,
+                    onDismiss = { showMenu = false },
+                    onCopy = onCopy,
+                    onDelete = onDelete,
+                )
             }
         }
     }
@@ -281,61 +354,178 @@ private fun StreamingMessageBubble(
 
 @Composable
 private fun GroupChatInputBar(
-    inputText: String,
-    onInputChange: (String) -> Unit,
+    inputFieldValue: TextFieldValue,
+    onInputChange: (TextFieldValue) -> Unit,
+    memberNames: List<String>,
     onSend: () -> Unit,
     onStop: () -> Unit,
     isGenerating: Boolean
 ) {
-    val showStop = isGenerating && inputText.isBlank()
+    val showStop = isGenerating && inputFieldValue.text.isBlank()
+
+    var showMentionPopup by remember { mutableStateOf(false) }
+    var mentionFilter by remember { mutableStateOf("") }
+    var mentionStartIndex by remember { mutableIntStateOf(-1) }
+
+    val filteredMembers = remember(mentionFilter, memberNames) {
+        if (mentionFilter.isEmpty()) memberNames
+        else memberNames.filter { it.contains(mentionFilter, ignoreCase = true) }
+    }
+
+    fun detectMention(value: TextFieldValue) {
+        val text = value.text
+        val cursor = value.selection.start
+        if (cursor <= 0 || text.isEmpty()) {
+            showMentionPopup = false
+            return
+        }
+        val atIndex = text.lastIndexOf('@', cursor - 1)
+        if (atIndex < 0) {
+            showMentionPopup = false
+            return
+        }
+        if (atIndex > 0 && !text[atIndex - 1].isWhitespace()) {
+            showMentionPopup = false
+            return
+        }
+        val fragment = text.substring(atIndex + 1, cursor)
+        if (fragment.contains(' ')) {
+            showMentionPopup = false
+            return
+        }
+        mentionStartIndex = atIndex
+        mentionFilter = fragment
+        showMentionPopup = memberNames.isNotEmpty()
+    }
+
     Surface(
         tonalElevation = 3.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = inputText,
-                onValueChange = onInputChange,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("说点什么...") },
-                maxLines = 4,
-                singleLine = false
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            if (showStop) {
-                FilledIconButton(
-                    onClick = onStop,
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
+        Column {
+            if (showMentionPopup && filteredMembers.isNotEmpty()) {
+                Surface(
+                    tonalElevation = 6.dp,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(
-                        HugeIcons.Cancel01,
-                        contentDescription = "停止生成"
-                    )
+                    Column(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        filteredMembers.take(6).forEach { name ->
+                            TextButton(
+                                onClick = {
+                                    val before = inputFieldValue.text.substring(0, mentionStartIndex)
+                                    val after = inputFieldValue.text.substring(
+                                        minOf(inputFieldValue.selection.start, inputFieldValue.text.length)
+                                    )
+                                    val inserted = "$before@$name "
+                                    val newText = inserted + after
+                                    onInputChange(TextFieldValue(
+                                        text = newText,
+                                        selection = TextRange(inserted.length)
+                                    ))
+                                    showMentionPopup = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    TextAvatar(
+                                        text = name,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(name)
+                                }
+                            }
+                        }
+                    }
                 }
-            } else {
-                IconButton(
-                    onClick = onSend,
-                    enabled = inputText.isNotBlank()
-                ) {
-                    Icon(
-                        HugeIcons.Forward02,
-                        contentDescription = "发送",
-                        tint = if (inputText.isNotBlank())
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
+            }
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = inputFieldValue,
+                    onValueChange = {
+                        onInputChange(it)
+                        detectMention(it)
+                    },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("说点什么...") },
+                    maxLines = 4,
+                    singleLine = false
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                if (showStop) {
+                    FilledIconButton(
+                        onClick = onStop,
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    ) {
+                        Icon(
+                            HugeIcons.Cancel01,
+                            contentDescription = "停止生成"
+                        )
+                    }
+                } else {
+                    IconButton(
+                        onClick = onSend,
+                        enabled = inputFieldValue.text.isNotBlank()
+                    ) {
+                        Icon(
+                            HugeIcons.Forward02,
+                            contentDescription = "发送",
+                            tint = if (inputFieldValue.text.isNotBlank())
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun MessageContextMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+    ) {
+        DropdownMenuItem(
+            text = { Text("复制") },
+            onClick = {
+                onCopy()
+                onDismiss()
+            },
+            leadingIcon = {
+                Icon(HugeIcons.Copy01, contentDescription = null, modifier = Modifier.size(18.dp))
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("删除") },
+            onClick = {
+                onDelete()
+                onDismiss()
+            },
+            leadingIcon = {
+                Icon(HugeIcons.Delete01, contentDescription = null, modifier = Modifier.size(18.dp))
+            }
+        )
     }
 }
 

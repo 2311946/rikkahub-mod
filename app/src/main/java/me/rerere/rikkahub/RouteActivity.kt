@@ -573,6 +573,7 @@ class RouteActivity : ComponentActivity() {
                                         streamingContent = generatingInfo.streamingContent,
                                         onSendMessage = { text -> vm.sendMessage(text) },
                                         onStopGeneration = { vm.stopGeneration() },
+                                        onDeleteMessage = { messageId -> vm.deleteMessage(messageId) },
                                         onBack = { backStack.removeLastOrNull() },
                                         onOpenSettings = { showSettings = true }
                                     )

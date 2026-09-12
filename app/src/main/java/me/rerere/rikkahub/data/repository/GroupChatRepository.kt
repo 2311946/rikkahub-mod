@@ -69,6 +69,10 @@ class GroupChatRepository(
     suspend fun clearMessages(groupChatId: Uuid) {
         groupMessageDAO.deleteByGroupChat(groupChatId.toString())
     }
+
+    suspend fun deleteMessage(messageId: String) {
+        groupMessageDAO.deleteById(messageId)
+    }
 }
 
 private fun GroupChatEntity.toDomain(): GroupChat {

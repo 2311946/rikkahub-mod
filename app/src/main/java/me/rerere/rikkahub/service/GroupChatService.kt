@@ -128,6 +128,8 @@ class GroupChatService(
                         ))
                     }
 
+                    delay(randomTypingDelay())
+
                     val messages = groupChatRepository.getMessages(groupChatId).first()
                     val reply = generateReply(speaker, groupChat, messages)
 
@@ -159,6 +161,9 @@ class GroupChatService(
                     delay(groupChat.autoModeDelay * 1000L)
                 }
             }
+
+            // Auto-reply chain: if a persona is @mentioned in the reply, let them respond (max 2 rounds)
+            handleAutoReplyChain(groupChatId, groupChat, allMembers, enabledMembers)
 
             _generatingState.update { it - groupChatId }
         }
@@ -294,5 +299,70 @@ class GroupChatService(
         delay(500 + Random.nextLong(1000))
         val lastContent = messages.lastOrNull()?.content?.take(20) ?: ""
         return "[API未配置] 你好，我是${speaker.name}。这是对「${lastContent}」的回复。"
+    }
+
+    private suspend fun handleAutoReplyChain(
+        groupChatId: Uuid,
+        groupChat: GroupChat,
+        allMembers: List<GroupSpeakerSelector.MemberInfo>,
+        enabledMembers: List<GroupSpeakerSelector.MemberInfo>,
+    ) {
+        var chainsLeft = 2
+        while (chainsLeft > 0) {
+            val currentMessages = groupChatRepository.getMessages(groupChatId).first()
+            val lastMsg = currentMessages.lastOrNull() ?: break
+            if (lastMsg.isUser) break
+
+            val mentionedNames = parseMentions(lastMsg.content)
+            if (mentionedNames.isEmpty()) break
+
+            val mentionedMembers = enabledMembers.filter { member ->
+                mentionedNames.any { it.equals(member.name, ignoreCase = true) }
+            }.filter { it.id != lastMsg.speakerId }
+
+            if (mentionedMembers.isEmpty()) break
+
+            for (member in mentionedMembers) {
+                _generatingState.update { map ->
+                    map + (groupChatId to GeneratingInfo(
+                        isGenerating = true,
+                        currentSpeaker = member.name,
+                    ))
+                }
+
+                delay(randomTypingDelay())
+
+                val msgs = groupChatRepository.getMessages(groupChatId).first()
+                val reply = generateReply(member, groupChat, msgs)
+
+                val colorIndex = if (groupChat.personas.isNotEmpty()) {
+                    groupChat.personas.indexOfFirst { it.id == member.id }.let {
+                        if (it >= 0) it % 8 else 0
+                    }
+                } else {
+                    groupChat.memberIds.indexOf(member.id).let {
+                        if (it >= 0) it % 8 else 0
+                    }
+                }
+                val assistantMessage = GroupMessage(
+                    content = reply,
+                    isUser = false,
+                    speakerName = member.name,
+                    speakerId = member.id,
+                    colorIndex = colorIndex,
+                )
+                groupChatRepository.insertMessage(groupChatId, assistantMessage)
+            }
+            chainsLeft--
+        }
+    }
+
+    private fun parseMentions(text: String): List<String> {
+        val regex = Regex("@(\\S+)")
+        return regex.findAll(text).map { it.groupValues[1] }.toList()
+    }
+
+    private fun randomTypingDelay(): Long {
+        return 800L + Random.nextLong(1200)
     }
 }

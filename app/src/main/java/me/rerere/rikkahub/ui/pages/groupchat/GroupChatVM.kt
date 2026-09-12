@@ -61,4 +61,10 @@ class GroupChatVM(
             groupChatRepository.clearMessages(groupChatId)
         }
     }
+
+    fun deleteMessage(messageId: String) {
+        viewModelScope.launch {
+            groupChatRepository.deleteMessage(messageId)
+        }
+    }
 }

@@ -41,6 +41,7 @@ fun GroupChatPage(
     messages: List<GroupMessage>,
     isGenerating: Boolean,
     currentSpeaker: String,
+    streamingContent: String = "",
     onSendMessage: (String) -> Unit,
     onStopGeneration: () -> Unit,
     onBack: () -> Unit,
@@ -125,7 +126,14 @@ fun GroupChatPage(
             }
             if (isGenerating) {
                 item(key = "typing_indicator") {
-                    TypingIndicator(speakerName = currentSpeaker)
+                    if (streamingContent.isNotEmpty()) {
+                        StreamingMessageBubble(
+                            speakerName = currentSpeaker,
+                            content = streamingContent,
+                        )
+                    } else {
+                        TypingIndicator(speakerName = currentSpeaker)
+                    }
                 }
             }
         }
@@ -224,6 +232,48 @@ private fun TypingIndicator(speakerName: String) {
                 LinearProgressIndicator(
                     modifier = Modifier.width(24.dp).height(2.dp)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StreamingMessageBubble(
+    speakerName: String,
+    content: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        TextAvatar(
+            text = speakerName,
+            modifier = Modifier.size(32.dp),
+            loading = true
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = speakerName,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+            )
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.widthIn(max = 280.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = content,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         }
     }

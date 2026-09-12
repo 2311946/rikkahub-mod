@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.service
 
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -8,8 +10,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import me.rerere.ai.core.MessageRole
+import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.data.ai.GenerationChunk
+import me.rerere.rikkahub.data.ai.GenerationLoop
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.findModelById
+import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.GroupActivationStrategy
 import me.rerere.rikkahub.data.model.GroupChat
 import me.rerere.rikkahub.data.model.GroupMessage
@@ -18,14 +27,18 @@ import me.rerere.rikkahub.data.repository.GroupChatRepository
 import kotlin.random.Random
 import kotlin.uuid.Uuid
 
+private const val TAG = "GroupChatService"
+
 class GroupChatService(
     private val appScope: AppScope,
     private val settingsStore: SettingsStore,
     private val groupChatRepository: GroupChatRepository,
+    private val generationLoop: GenerationLoop,
 ) {
     data class GeneratingInfo(
         val isGenerating: Boolean = false,
         val currentSpeaker: String = "",
+        val streamingContent: String = "",
     )
 
     private val _generatingState = MutableStateFlow<Map<Uuid, GeneratingInfo>>(emptyMap())
@@ -165,8 +178,121 @@ class GroupChatService(
         groupChat: GroupChat,
         messages: List<GroupMessage>,
     ): String {
+        val settings = settingsStore.settingsFlow.first()
+
+        val assistantId = speaker.assistantId
+        if (assistantId == null) {
+            Log.w(TAG, "No assistantId for speaker ${speaker.name}, using fallback")
+            return fallbackReply(speaker, messages)
+        }
+        val assistant = settings.getAssistantById(assistantId)
+        if (assistant == null) {
+            Log.w(TAG, "Assistant not found for speaker ${speaker.name} ($assistantId), using fallback")
+            return fallbackReply(speaker, messages)
+        }
+
+        val modelId = groupChat.chatModelId ?: assistant.chatModelId ?: settings.chatModelId
+        val model = settings.findModelById(modelId)
+        if (model == null) {
+            Log.w(TAG, "Model not found for speaker ${speaker.name}, using fallback")
+            return fallbackReply(speaker, messages)
+        }
+
+        val persona = groupChat.personas.find { it.id == speaker.id }
+        val effectiveSystemPrompt = when {
+            persona != null && persona.systemPrompt.isNotBlank() -> persona.systemPrompt
+            else -> assistant.systemPrompt
+        }
+
+        val groupContextPrompt = buildString {
+            appendLine("你正在一个群聊中。你的角色名是「${speaker.name}」。")
+            appendLine("请以${speaker.name}的身份回复，保持角色一致性。")
+            appendLine("回复应该简洁自然，像真实群聊对话一样。不要使用角色名前缀。")
+        }
+
+        val effectiveAssistant = assistant.copy(
+            systemPrompt = buildString {
+                if (effectiveSystemPrompt.isNotBlank()) {
+                    appendLine(effectiveSystemPrompt)
+                    appendLine()
+                }
+                append(groupContextPrompt)
+            },
+            chatModelId = model.id,
+            streamOutput = true,
+        )
+
+        val uiMessages = buildGroupChatContext(messages, speaker)
+
+        return try {
+            val result = StringBuilder()
+            generationLoop.generateText(
+                settings = settings,
+                model = model,
+                messages = uiMessages,
+                assistant = effectiveAssistant,
+                maxSteps = 1,
+            ).collect { chunk ->
+                when (chunk) {
+                    is GenerationChunk.Messages -> {
+                        val lastMsg = chunk.messages.lastOrNull()
+                        if (lastMsg != null && lastMsg.role == MessageRole.ASSISTANT) {
+                            val text = lastMsg.toText()
+                            result.clear()
+                            result.append(text)
+                            _generatingState.update { map ->
+                                val current = map[groupChat.id] ?: GeneratingInfo()
+                                map + (groupChat.id to current.copy(
+                                    streamingContent = text,
+                                ))
+                            }
+                        }
+                    }
+                }
+            }
+            result.toString().trim().ifEmpty {
+                fallbackReply(speaker, messages)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Generation failed for ${speaker.name}", e)
+            fallbackReply(speaker, messages)
+        }
+    }
+
+    private fun buildGroupChatContext(
+        messages: List<GroupMessage>,
+        currentSpeaker: GroupSpeakerSelector.MemberInfo,
+    ): List<UIMessage> {
+        return messages.takeLast(50).map { msg ->
+            if (msg.isUser) {
+                UIMessage(
+                    role = MessageRole.USER,
+                    parts = listOf(UIMessagePart.Text(msg.content)),
+                )
+            } else {
+                if (msg.speakerId == currentSpeaker.id) {
+                    UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(UIMessagePart.Text(msg.content)),
+                    )
+                } else {
+                    UIMessage(
+                        role = MessageRole.USER,
+                        parts = listOf(UIMessagePart.Text("[${msg.speakerName}]: ${msg.content}")),
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun fallbackReply(
+        speaker: GroupSpeakerSelector.MemberInfo,
+        messages: List<GroupMessage>,
+    ): String {
         delay(500 + Random.nextLong(1000))
         val lastContent = messages.lastOrNull()?.content?.take(20) ?: ""
-        return "你好，我是${speaker.name}。这是对「${lastContent}」的回复。"
+        return "[API未配置] 你好，我是${speaker.name}。这是对「${lastContent}」的回复。"
     }
 }

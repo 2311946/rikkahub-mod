@@ -570,6 +570,7 @@ class RouteActivity : ComponentActivity() {
                                         messages = messages,
                                         isGenerating = generatingInfo.isGenerating,
                                         currentSpeaker = generatingInfo.currentSpeaker,
+                                        streamingContent = generatingInfo.streamingContent,
                                         onSendMessage = { text -> vm.sendMessage(text) },
                                         onStopGeneration = { vm.stopGeneration() },
                                         onBack = { backStack.removeLastOrNull() },

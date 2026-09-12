@@ -104,7 +104,7 @@ val dataSourceModule = module {
         get<AppDatabase>().groupMessageDao()
     }
 
-    single { GroupChatService(get(), get(), get()) }
+    single { GroupChatService(get(), get(), get(), get()) }
 
     single {
         MessageFtsManager(get())

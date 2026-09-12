@@ -699,9 +699,10 @@ private fun PersonaManagementSection(
 ) {
     Text("角色管理", style = MaterialTheme.typography.titleMedium)
 
+    val validAssistants = assistants.filter { it.second.isNotBlank() }
     val personasByAssistant = groupChat.personas.groupBy { it.assistantId }
 
-    assistants.forEach { (assistantId, assistantName) ->
+    validAssistants.forEach { (assistantId, assistantName) ->
         val thisAssistantPersonas = personasByAssistant[assistantId] ?: emptyList()
         if (thisAssistantPersonas.isNotEmpty()) {
             Row(
@@ -766,7 +767,7 @@ private fun PersonaManagementSection(
 
     // Assistants not yet in the group — offer to add personas from them
     val usedAssistantIds = personasByAssistant.keys
-    val unusedAssistants = assistants.filter { it.first !in usedAssistantIds }
+    val unusedAssistants = validAssistants.filter { it.first !in usedAssistantIds }
     if (unusedAssistants.isNotEmpty()) {
         Text("添加新助手的角色", style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -791,7 +792,8 @@ private fun LegacyMemberSection(
     onUpdateGroupChat: (GroupChat) -> Unit
 ) {
     Text("成员管理", style = MaterialTheme.typography.titleMedium)
-    assistants.forEach { (id, assistantName) ->
+    val validAssistants = assistants.filter { it.second.isNotBlank() }
+    validAssistants.forEach { (id, assistantName) ->
         val isMember = id in groupChat.memberIds
         val isDisabled = id in groupChat.disabledMemberIds
         Row(

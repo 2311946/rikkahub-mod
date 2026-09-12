@@ -170,6 +170,7 @@ private fun CreateGroupChatDialog(
     var strategy by remember { mutableStateOf(GroupActivationStrategy.NATURAL) }
     var autoRounds by remember { mutableStateOf(3) }
     var autoDelay by remember { mutableStateOf(3) }
+    val validAssistants = remember(assistants) { assistants.filter { it.second.isNotBlank() } }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -223,7 +224,7 @@ private fun CreateGroupChatDialog(
                 )
 
                 Text("角色（至少2个）", style = MaterialTheme.typography.labelLarge)
-                assistants.forEach { (assistantId, assistantName) ->
+                validAssistants.forEach { (assistantId, assistantName) ->
                     val assistantPersonas = personas.filter { it.assistantId == assistantId }
                     Column {
                         Row(

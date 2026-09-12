@@ -19,11 +19,13 @@ import me.rerere.rikkahub.data.ai.GenerationLoop
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.getAssistantById
+import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.model.GroupActivationStrategy
 import me.rerere.rikkahub.data.model.GroupChat
 import me.rerere.rikkahub.data.model.GroupMessage
 import me.rerere.rikkahub.data.model.GroupSpeakerSelector
 import me.rerere.rikkahub.data.repository.GroupChatRepository
+import me.rerere.rikkahub.data.repository.MemoryRepository
 import kotlin.random.Random
 import kotlin.uuid.Uuid
 
@@ -34,6 +36,7 @@ class GroupChatService(
     private val settingsStore: SettingsStore,
     private val groupChatRepository: GroupChatRepository,
     private val generationLoop: GenerationLoop,
+    private val memoryRepository: MemoryRepository,
 ) {
     data class GeneratingInfo(
         val isGenerating: Boolean = false,
@@ -197,7 +200,7 @@ class GroupChatService(
         }
 
         val modelId = groupChat.chatModelId ?: assistant.chatModelId ?: settings.chatModelId
-        val model = settings.findModelById(modelId)
+        val model = settings.findModelById(modelId) ?: settings.getCurrentChatModel()
         if (model == null) {
             Log.w(TAG, "Model not found for speaker ${speaker.name}, using fallback")
             return fallbackReply(speaker, messages)
@@ -229,6 +232,12 @@ class GroupChatService(
 
         val uiMessages = buildGroupChatContext(messages, speaker)
 
+        val memories = if (assistant.useGlobalMemory) {
+            memoryRepository.getGlobalMemories()
+        } else {
+            memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
+        }
+
         return try {
             val result = StringBuilder()
             generationLoop.generateText(
@@ -236,6 +245,7 @@ class GroupChatService(
                 model = model,
                 messages = uiMessages,
                 assistant = effectiveAssistant,
+                memories = memories,
                 maxSteps = 1,
             ).collect { chunk ->
                 when (chunk) {

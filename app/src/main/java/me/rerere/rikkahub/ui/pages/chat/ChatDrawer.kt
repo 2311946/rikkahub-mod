@@ -418,6 +418,7 @@ fun ChatDrawerContent(
                 Spacer(Modifier.weight(1f))
 
                 DrawerAction(
+                    modifier = Modifier.padding(start = 8.dp),
                     icon = {
                         Icon(HugeIcons.Settings03, null)
                     },

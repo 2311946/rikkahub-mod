@@ -789,7 +789,7 @@ private fun DrawerAction(
             Box(
                 modifier = Modifier
                     .padding(10.dp)
-                    .size(20.dp),
+                    .size(24.dp),
             ) {
                 icon()
             }

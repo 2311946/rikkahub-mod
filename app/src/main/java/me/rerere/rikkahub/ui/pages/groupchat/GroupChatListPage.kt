@@ -19,6 +19,8 @@ import me.rerere.hugeicons.stroke.ArrowTurnBackward
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Message02
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowUp01
 import kotlin.uuid.Uuid
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -26,6 +28,7 @@ import kotlin.uuid.Uuid
 fun GroupChatListPage(
     groupChats: List<GroupChat>,
     assistants: List<Pair<Uuid, String>>,
+    assistantsWithConversations: List<AssistantWithConversations>,
     onNavigateToGroupChat: (Uuid) -> Unit,
     onCreateGroupChat: (GroupChat) -> Unit,
     onBack: () -> Unit
@@ -98,7 +101,7 @@ fun GroupChatListPage(
 
     if (showCreateDialog) {
         CreateGroupChatDialog(
-            assistants = assistants,
+            assistantsWithConversations = assistantsWithConversations,
             onDismiss = { showCreateDialog = false },
             onCreate = { gc ->
                 onCreateGroupChat(gc)
@@ -161,7 +164,7 @@ private fun GroupChatItem(
 
 @Composable
 private fun CreateGroupChatDialog(
-    assistants: List<Pair<Uuid, String>>,
+    assistantsWithConversations: List<AssistantWithConversations>,
     onDismiss: () -> Unit,
     onCreate: (GroupChat) -> Unit
 ) {
@@ -170,7 +173,12 @@ private fun CreateGroupChatDialog(
     var strategy by remember { mutableStateOf(GroupActivationStrategy.NATURAL) }
     var autoRounds by remember { mutableStateOf(3) }
     var autoDelay by remember { mutableStateOf(3) }
-    val validAssistants = remember(assistants) { assistants.filter { it.second.isNotBlank() } }
+    // Track which assistants are expanded to show conversations
+    var expandedAssistants by remember { mutableStateOf(setOf<Uuid>()) }
+
+    val validAssistants = remember(assistantsWithConversations) {
+        assistantsWithConversations.filter { it.name.isNotBlank() }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -223,33 +231,64 @@ private fun CreateGroupChatDialog(
                     steps = 8
                 )
 
-                Text("角色（至少2个）", style = MaterialTheme.typography.labelLarge)
-                validAssistants.forEach { (assistantId, assistantName) ->
-                    val assistantPersonas = personas.filter { it.assistantId == assistantId }
+                Text("选择助手（勾选加入群聊，至少2个角色）", style = MaterialTheme.typography.labelLarge)
+
+                validAssistants.forEach { awc ->
+                    val assistantId = awc.id
+                    val assistantName = awc.name
+                    val hasPersona = personas.any { it.assistantId == assistantId }
+                    val isExpanded = assistantId in expandedAssistants
+
                     Column {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Checkbox(
+                                checked = hasPersona,
+                                onCheckedChange = { checked ->
+                                    if (checked) {
+                                        personas = personas + GroupPersona(
+                                            assistantId = assistantId,
+                                            name = assistantName,
+                                        )
+                                    } else {
+                                        personas = personas.filter { it.assistantId != assistantId }
+                                    }
+                                }
+                            )
                             Text(
-                                text = assistantName,
+                                text = assistantName.ifBlank { "未命名助手" },
                                 style = MaterialTheme.typography.titleSmall,
                                 modifier = Modifier.weight(1f)
                             )
-                            TextButton(onClick = {
-                                personas = personas + GroupPersona(
-                                    assistantId = assistantId,
-                                    name = assistantName,
-                                )
-                            }) {
-                                Text("添加角色")
+                            if (awc.conversations.isNotEmpty()) {
+                                IconButton(
+                                    onClick = {
+                                        expandedAssistants = if (isExpanded) {
+                                            expandedAssistants - assistantId
+                                        } else {
+                                            expandedAssistants + assistantId
+                                        }
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        if (isExpanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
+                                        contentDescription = if (isExpanded) "收起" else "展开",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                             }
                         }
+
+                        // Show persona name editor when checked
+                        val assistantPersonas = personas.filter { it.assistantId == assistantId }
                         assistantPersonas.forEach { persona ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(start = 16.dp, bottom = 4.dp),
+                                    .padding(start = 40.dp, bottom = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 OutlinedTextField(
@@ -263,17 +302,76 @@ private fun CreateGroupChatDialog(
                                     modifier = Modifier.weight(1f),
                                     singleLine = true
                                 )
-                                IconButton(onClick = {
-                                    personas = personas.filter { it.id != persona.id }
-                                }) {
-                                    Icon(HugeIcons.Cancel01, contentDescription = "删除",
-                                        modifier = Modifier.size(18.dp)
-                                    )
+                                if (assistantPersonas.size > 1) {
+                                    IconButton(onClick = {
+                                        personas = personas.filter { it.id != persona.id }
+                                    }) {
+                                        Icon(HugeIcons.Cancel01, contentDescription = "删除",
+                                            modifier = Modifier.size(18.dp))
+                                    }
                                 }
                             }
                         }
-                    }
-                    if (assistantPersonas.isNotEmpty()) {
+
+                        // Add more personas for this assistant
+                        if (hasPersona) {
+                            TextButton(
+                                onClick = {
+                                    personas = personas + GroupPersona(
+                                        assistantId = assistantId,
+                                        name = assistantName,
+                                    )
+                                },
+                                modifier = Modifier.padding(start = 32.dp)
+                            ) {
+                                Text("+ 添加更多角色")
+                            }
+                        }
+
+                        // Show conversations under this assistant
+                        if (isExpanded && awc.conversations.isNotEmpty()) {
+                            Column(
+                                modifier = Modifier.padding(start = 40.dp)
+                            ) {
+                                Text(
+                                    "对话列表",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                                awc.conversations.forEach { (convoId, convoTitle) ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                if (!hasPersona) {
+                                                    personas = personas + GroupPersona(
+                                                        assistantId = assistantId,
+                                                        name = assistantName,
+                                                    )
+                                                }
+                                            }
+                                            .padding(vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            HugeIcons.Message02,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = convoTitle,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     }
                 }

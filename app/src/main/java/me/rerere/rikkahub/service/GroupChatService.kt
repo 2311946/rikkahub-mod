@@ -24,6 +24,9 @@ import me.rerere.rikkahub.data.model.GroupActivationStrategy
 import me.rerere.rikkahub.data.model.GroupChat
 import me.rerere.rikkahub.data.model.GroupMessage
 import me.rerere.rikkahub.data.model.GroupSpeakerSelector
+import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.GroupChatRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import kotlin.random.Random
@@ -37,6 +40,7 @@ class GroupChatService(
     private val groupChatRepository: GroupChatRepository,
     private val generationLoop: GenerationLoop,
     private val memoryRepository: MemoryRepository,
+    private val conversationRepository: ConversationRepository,
 ) {
     data class GeneratingInfo(
         val isGenerating: Boolean = false,
@@ -153,6 +157,13 @@ class GroupChatService(
                         colorIndex = colorIndex,
                     )
                     groupChatRepository.insertMessage(groupChatId, assistantMessage)
+
+                    syncMessageToSingleChat(
+                        userText = text,
+                        assistantReply = reply,
+                        speaker = speaker,
+                        groupChatName = groupChat.name,
+                    )
 
                     lastSpeakerId = speaker.id
                     if (groupChat.activationStrategy == GroupActivationStrategy.LIST) {
@@ -362,6 +373,13 @@ class GroupChatService(
                     colorIndex = colorIndex,
                 )
                 groupChatRepository.insertMessage(groupChatId, assistantMessage)
+
+                syncMessageToSingleChat(
+                    userText = lastMsg.content,
+                    assistantReply = reply,
+                    speaker = member,
+                    groupChatName = groupChat.name,
+                )
             }
             chainsLeft--
         }
@@ -370,6 +388,53 @@ class GroupChatService(
     private fun parseMentions(text: String): List<String> {
         val regex = Regex("@(\\S+)")
         return regex.findAll(text).map { it.groupValues[1] }.toList()
+    }
+
+    private suspend fun syncMessageToSingleChat(
+        userText: String,
+        assistantReply: String,
+        speaker: GroupSpeakerSelector.MemberInfo,
+        groupChatName: String,
+    ) {
+        val assistantId = speaker.assistantId ?: return
+        try {
+            val conversations = conversationRepository.getRecentConversations(assistantId, 1)
+            val conversation = conversations.firstOrNull()
+            if (conversation != null) {
+                val userMsg = UIMessage(
+                    role = MessageRole.USER,
+                    parts = listOf(UIMessagePart.Text("[群聊:$groupChatName] $userText")),
+                )
+                val assistantMsg = UIMessage(
+                    role = MessageRole.ASSISTANT,
+                    parts = listOf(UIMessagePart.Text(assistantReply)),
+                )
+                val updated = conversation.updateCurrentMessages(
+                    conversation.currentMessages + userMsg + assistantMsg
+                )
+                conversationRepository.updateConversation(updated)
+            } else {
+                val userMsg = UIMessage(
+                    role = MessageRole.USER,
+                    parts = listOf(UIMessagePart.Text("[群聊:$groupChatName] $userText")),
+                )
+                val assistantMsg = UIMessage(
+                    role = MessageRole.ASSISTANT,
+                    parts = listOf(UIMessagePart.Text(assistantReply)),
+                )
+                val newConversation = Conversation(
+                    assistantId = assistantId,
+                    title = "群聊同步: $groupChatName",
+                    messageNodes = listOf(
+                        MessageNode.of(userMsg),
+                        MessageNode.of(assistantMsg),
+                    ),
+                )
+                conversationRepository.insertConversation(newConversation)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to sync message to single chat for ${speaker.name}", e)
+        }
     }
 
     private fun randomTypingDelay(): Long {

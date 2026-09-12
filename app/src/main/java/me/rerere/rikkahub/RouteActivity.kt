@@ -131,6 +131,7 @@ import me.rerere.rikkahub.ui.pages.webview.WebViewPage
 import me.rerere.rikkahub.ui.pages.groupchat.GroupChatListPage
 import me.rerere.rikkahub.ui.pages.groupchat.GroupChatPage
 import me.rerere.rikkahub.ui.pages.groupchat.GroupChatSettingsSheet
+import me.rerere.rikkahub.ui.pages.groupchat.AssistantWithConversations
 import me.rerere.rikkahub.ui.pages.groupchat.GroupChatListVM
 import me.rerere.rikkahub.ui.pages.groupchat.GroupChatVM
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
@@ -543,9 +544,11 @@ class RouteActivity : ComponentActivity() {
                                 val vm: GroupChatListVM = koinViewModel()
                                 val groupChats by vm.groupChats.collectAsStateWithLifecycle()
                                 val assistants by vm.assistants.collectAsStateWithLifecycle()
+                                val assistantsWithConversations by vm.assistantsWithConversations.collectAsStateWithLifecycle()
                                 GroupChatListPage(
                                     groupChats = groupChats,
                                     assistants = assistants,
+                                    assistantsWithConversations = assistantsWithConversations,
                                     onNavigateToGroupChat = { id ->
                                         backStack.add(Screen.GroupChat(id.toString()))
                                     },

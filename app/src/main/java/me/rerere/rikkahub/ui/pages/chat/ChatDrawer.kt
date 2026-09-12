@@ -325,7 +325,7 @@ fun ChatDrawerContent(
             )
 
             Row(
-                horizontalArrangement = Arrangement.SpaceAround,
+                horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -404,6 +404,7 @@ fun ChatDrawerContent(
                         navController.navigate(Screen.Stats)
                     },
                 )
+
                 DrawerAction(
                     icon = {
                         Icon(HugeIcons.Message02, "群聊")
@@ -415,10 +416,8 @@ fun ChatDrawerContent(
                         navController.navigate(Screen.GroupChatList)
                     },
                 )
-                Spacer(Modifier.weight(1f))
 
                 DrawerAction(
-                    modifier = Modifier.padding(start = 8.dp),
                     icon = {
                         Icon(HugeIcons.Settings03, null)
                     },

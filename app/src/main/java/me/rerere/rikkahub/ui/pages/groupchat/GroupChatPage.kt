@@ -616,24 +616,29 @@ fun GroupChatSettingsSheet(
             var showClearConfirm by remember { mutableStateOf(false) }
             var showDeleteConfirm by remember { mutableStateOf(false) }
 
-            OutlinedButton(
-                onClick = { showClearConfirm = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(HugeIcons.Delete01, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("清除消息")
-            }
-            OutlinedButton(
-                onClick = { showDeleteConfirm = true },
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error
-                )
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(HugeIcons.Delete01, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("删除群聊")
+                OutlinedButton(
+                    onClick = { showClearConfirm = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(HugeIcons.Delete01, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("清除消息")
+                }
+                OutlinedButton(
+                    onClick = { showDeleteConfirm = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Icon(HugeIcons.Delete01, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("删除群聊")
+                }
             }
 
             if (showClearConfirm) {

@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.groupchat
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,9 +30,11 @@ fun GroupChatListPage(
     assistantsWithConversations: List<AssistantWithConversations>,
     onNavigateToGroupChat: (Uuid) -> Unit,
     onCreateGroupChat: (GroupChat) -> Unit,
+    onDeleteGroupChat: (Uuid) -> Unit,
     onBack: () -> Unit
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<GroupChat?>(null) }
 
     Scaffold(
         topBar = {
@@ -90,7 +93,8 @@ fun GroupChatListPage(
                     GroupChatItem(
                         groupChat = gc,
                         assistants = assistants,
-                        onClick = { onNavigateToGroupChat(gc.id) }
+                        onClick = { onNavigateToGroupChat(gc.id) },
+                        onLongClick = { deleteTarget = gc }
                     )
                 }
             }
@@ -107,18 +111,44 @@ fun GroupChatListPage(
             }
         )
     }
+
+    deleteTarget?.let { gc ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("删除群聊") },
+            text = { Text("确定要删除「${gc.name.ifEmpty { "未命名群聊" }}」吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDeleteGroupChat(gc.id)
+                    deleteTarget = null
+                }) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun GroupChatItem(
     groupChat: GroupChat,
     assistants: List<Pair<Uuid, String>>,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
     ) {
         Row(
             modifier = Modifier

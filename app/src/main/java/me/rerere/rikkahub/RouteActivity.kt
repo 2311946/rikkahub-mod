@@ -553,6 +553,7 @@ class RouteActivity : ComponentActivity() {
                                         backStack.add(Screen.GroupChat(id.toString()))
                                     },
                                     onCreateGroupChat = { gc -> vm.createGroupChat(gc) },
+                                    onDeleteGroupChat = { id -> vm.deleteGroupChat(id) },
                                     onBack = { backStack.removeLastOrNull() }
                                 )
                             }
